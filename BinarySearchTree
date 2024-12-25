@@ -1,0 +1,394 @@
+#include <iostream>
+#include <algorithm>
+#include <tuple>
+#include <queue>
+#include <limits>
+#include<map>
+
+using namespace std;
+
+// a binary search tree
+
+template <typename E>
+
+class SearchTree {          
+
+public:
+
+ typedef typename E::Key K;   // a key (from Entry in Maps)
+
+ typedef typename E::Value V; // a value (from Entry in Maps)
+
+ class Iterator;              // an iterator/position
+
+// public functions
+
+public:
+
+ SearchTree();         // constructor
+
+ int size() const;     // number of entries
+
+ bool empty() const;   // is the tree empty?
+
+
+
+ Iterator find(const K& k); // find entry with key k
+
+ Iterator insert(const K& k, const V& x); // insert (k,x)
+
+
+
+ // remove key k entry
+
+ void erase(const K& k) ;
+
+ // remove entry at p
+
+ void erase(const Iterator& p);
+
+
+
+
+ Iterator end();      // iterator to end entry
+// local utilities
+
+protected: 
+
+ // linked binary tree
+
+ typedef LinkedBinaryTree<E> LinkedBinaryTree; 
+
+
+ // position in the tree
+
+ typedef typename LinkedBinaryTree::Position TPos;
+
+private:       // member data
+
+ LinkedBinaryTree T; // the binary tree
+
+ int n;        // number of entries
+
+
+
+public:
+
+ class Iterator { // an iterator/position
+
+ private:
+
+   TPos v; // which entry
+
+ public:
+
+   Iterator(const TPos& vv) : v(vv) { } // constructor
+
+   // get entry (read only)
+
+   const E& operator*() const { return *v; }
+
+   // get entry (read/write)
+
+   E& operator*() { return *v; }   
+
+
+
+   // are iterators equal?
+
+   bool operator==(const Iterator& p) const { return v == p.v;}
+
+   Iterator& operator++();     // inorder successor
+
+   friend class SearchTree;    // give search tree access
+
+ };
+
+};
+
+ TPos root() const;                      // get virtual root
+
+ TPos finder(const K& k, const TPos& v); // find utility
+
+ TPos inserter(const K& k, const V& x);  // insert utility
+
+ TPos eraser(TPos& v);                   // erase utility
+
+ TPos restructure(const TPos& v);         // restructure
+
+
+
+template <typename E> // inorder successor   
+
+typename SearchTree<E>::Iterator&
+
+SearchTree<E>::Iterator::operator++() {
+
+ TPos w = v.right();
+
+ if (w.isInternal()) {  // have right subtree?
+
+   do {                 // move down left chain
+
+     v = w;
+
+     w = w.left();
+
+   } while (w.isInternal());
+
+ } else {
+
+   w = v.parent(); // get parent
+
+
+
+   while (v == w.right()) { // move up right chain
+
+     v = w;
+
+     w = w.parent();
+
+   }
+
+
+
+   // and first link to left
+
+   v = w;
+
+ }
+
+
+ return *this;
+
+}
+
+// constructor (create the super root)
+
+template <typename E> 
+
+SearchTree<E>::SearchTree() : T(), n(0) {
+
+ T.addRoot();
+
+ T.expandExternal(T.root());
+
+} 
+
+// find utility
+
+template <typename E>         
+
+typename SearchTree<E>::TPos
+
+SearchTree<E>::finder(const K& k, const TPos& v) {
+
+ if (v.isExternal())
+
+   return v;                    // key not found
+
+ if (k < v->key())
+
+   return finder(k, v.left());  // search left subtree
+
+ else if (v->key() < k)
+
+   return finder(k, v.right()); // search right subtree
+
+ else return v;                 // found it here
+
+}
+
+
+
+// find entry with key k
+
+template <typename E>         
+
+typename SearchTree<E>::Iterator
+
+SearchTree<E>::find(const K& k) {
+
+ TPos v = finder(k, root());    // search from virtual root
+
+ if (v.isInternal())
+
+   return Iterator(v);          // found it
+
+ else
+
+   return end();                // didn't find it
+
+}
+
+// get virtual root (left child of super root)
+
+template <typename E> 
+
+typename SearchTree<E>::TPos SearchTree<E>::root() const {
+
+ return T.root().left();
+
+}
+
+
+
+// REMINDER CODE: expand external node
+
+void LinkedBinaryTree::expandExternal(const Position& p) {
+
+ Node* v = p.v;          // p's node
+
+ v->left = new Node;     // add a new left child
+
+ v->left->par = v;       // v is its parent
+
+ v->right = new Node;    // and a new right child
+
+ v->right->par = v;      // v is its parent
+
+ n += 2;                 // two more nodes
+
+}
+
+void LinkedBinaryTree::addRoot() { _root = new Node; n = 1; }
+
+template <typename E>         // iterator to first entry
+
+typename SearchTree<E>::Iterator SearchTree<E>::begin() {
+
+ TPos v = root();                     // start at virtual root
+
+ while (v.isInternal()) v = v.left(); // find leftmost node
+
+ return Iterator(v.parent());
+
+}
+
+
+
+// iterator to end entry
+
+template <typename E>         
+
+typename SearchTree<E>::Iterator SearchTree<E>::end() {
+
+ return Iterator(T.root()); // return the super root
+ 
+}     
+
+// insert utility
+template <typename E>       
+
+typename SearchTree<E>::TPos
+
+SearchTree<E>::inserter(const K& k, const V& x) {
+
+ TPos v = finder(k, root());  // search from virtual root
+
+ while (v.isInternal())       // key already exists?
+
+   v = finder(k, v.right());  // look further
+
+ T.expandExternal(v);         // add new internal node
+
+ v->setKey(k);                // set entry
+
+ v->setValue(x);
+
+ n++;                         // one more entry
+
+ return v;                    // return insert position
+
+}
+
+
+
+// insert (k,x)
+
+template <typename E>         
+
+typename SearchTree<E>::Iterator
+
+SearchTree<E>::insert(const K& k, const V& x) {
+
+ TPos v = inserter(k, x);
+
+ return Iterator(v);
+
+// remove key k entry
+
+template <typename E>         
+
+void SearchTree<E>::erase(const K& k)  {
+
+ TPos v = finder(k, root());     // search from virtual root
+
+ if (v.isExternal())             // not found?
+
+   throw NonexistentElement("Erase of nonexistent");
+
+ eraser(v);                      // remove it
+
+}
+
+
+
+// erase entry at p
+
+template <typename E>         
+
+void SearchTree<E>::erase(const Iterator& p) {
+
+ eraser(p.v);
+
+}
+
+// remove utility
+
+template <typename E>         
+
+typename SearchTree<E>::TPos SearchTree<E>::eraser(TPos& v) {
+
+ TPos w;
+
+ if (v.left().isExternal()) {
+
+   w = v.left();                       // remove from left
+
+ } else if (v.right().isExternal()) {
+
+   w = v.right();                      // remove from right
+
+ } else {                              // both internal?
+
+   w = v.right();                      // go to right subtree
+
+   do {
+
+     w = w.left();
+
+   } while (w.isInternal());           // get leftmost node
+
+   TPos u = w.parent();
+
+
+
+   // copy w's parent to v
+
+   v->setKey(u->key());
+
+   v->setValue(u->value());  
+
+ }
+
+
+
+ // one less entry and remove w and parent
+
+ n--;
+
+ return T.removeAboveExternal(w);
+
+}
+
